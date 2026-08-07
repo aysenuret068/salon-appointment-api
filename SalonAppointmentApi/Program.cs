@@ -18,7 +18,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFlutter", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
         policy
             .AllowAnyOrigin()
@@ -62,7 +62,7 @@ app.UseSwaggerUI();
 // Render HTTPS iþlemini kendisi yönettiði için burada
 // app.UseHttpsRedirection() kullanmýyoruz.
 
-app.UseCors("AllowFlutter");
+app.UseCors("AllowAll");
 
 app.UseAuthorization();
 app.MapControllers();
@@ -76,4 +76,4 @@ app.MapGet("/", () => Results.Ok(
 
 
 
-app.Run();
+app.Run();  

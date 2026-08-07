@@ -22,7 +22,7 @@ public class AppointmentsController : ControllerBase
     public async Task<IActionResult> CreateAppointment(CreateAppointmentRequest request)
     {
         await using var transaction = await _context.Database
-            .BeginTransactionAsync(IsolationLevel.Serializable);
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
         var business = await _context.Businesses
             .FirstOrDefaultAsync(x => x.Id == request.BusinessId);
