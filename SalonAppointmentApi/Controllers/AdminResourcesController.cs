@@ -46,6 +46,20 @@ public sealed class AdminResourcesController(AppDbContext db) : ControllerBase
         .Where(x => x.IsActive && !x.IsDeleted).OrderBy(x => x.Name)
         .Select(x => new { x.Id, x.Name }).ToListAsync());
 
+    [HttpGet("lookups/businesses/{businessId:int}/assignment-options")]
+    public async Task<IActionResult> AssignmentOptions(int businessId)
+    {
+        if (!await db.Businesses.AsNoTracking().AnyAsync(x => x.Id == businessId && x.IsActive && !x.IsDeleted))
+            return NotFound(new { message = "İşletme bulunamadı veya aktif değil." });
+        var employees = await db.Employees.AsNoTracking()
+            .Where(x => x.BusinessId == businessId && x.IsActive && !x.IsDeleted)
+            .OrderBy(x => x.FullName).Select(x => new { x.Id, x.FullName }).ToListAsync();
+        var services = await db.Services.AsNoTracking()
+            .Where(x => x.BusinessId == businessId && x.IsActive && !x.IsDeleted)
+            .OrderBy(x => x.Name).Select(x => new { x.Id, x.Name }).ToListAsync();
+        return Ok(new { employees, services });
+    }
+
     [HttpGet("reports")] public async Task<IActionResult> Reports(DateTime? from=null,DateTime? to=null){var start=(from??DateTime.UtcNow.AddDays(-30)).Date;var end=(to??DateTime.UtcNow).Date.AddDays(1);var q=db.Appointments.AsNoTracking().Where(x=>x.StartTime>=start&&x.StartTime<end);return Ok(new{from=start,to=end.AddDays(-1),appointments=await q.CountAsync(),completed=await q.CountAsync(x=>x.Status=="Completed"),cancelled=await q.CountAsync(x=>x.Status=="CancelledRefunded"||x.Status=="CancelledLate"),revenue=await q.Where(x=>x.Status=="Completed").SumAsync(x=>(decimal?)x.TotalPrice)??0});}
     [HttpGet("system-status")] public async Task<IActionResult> Status(){var start=DateTime.UtcNow;var connected=await db.Database.CanConnectAsync();return Ok(new{status=connected?"Healthy":"Unhealthy",database=connected?"Connected":"Disconnected",checkedAtUtc=DateTime.UtcNow,responseMilliseconds=(DateTime.UtcNow-start).TotalMilliseconds});}
 }

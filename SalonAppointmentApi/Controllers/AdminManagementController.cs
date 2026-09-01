@@ -100,8 +100,58 @@ public sealed class AdminManagementController(AppDbContext db,IWebHostEnvironmen
     [HttpPatch("services/{id:int}/status")] public async Task<IActionResult> ServiceStatus(int id,StatusUpdate v){var x=await db.Services.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Hizmet bulunamadı."});x.IsActive=v.IsActive;await db.SaveChangesAsync();await Audit(v.IsActive?"ServiceActivated":"ServiceDisabled","Service",id);return Ok(new{x.Id,x.IsActive});}
     [HttpDelete("services/{id:int}")] public async Task<IActionResult> DeleteService(int id){var x=await db.Services.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Hizmet bulunamadı."});x.IsDeleted=true;x.IsActive=false;await db.SaveChangesAsync();await Audit("ServiceDeleted","Service",id);return NoContent();}
 
-    [HttpPost("employee-services")] public async Task<IActionResult> Assign(AssignmentCreate v){var employee=await db.Employees.FindAsync(v.EmployeeId);var service=await db.Services.FindAsync(v.ServiceId);if(employee==null||service==null||employee.IsDeleted||service.IsDeleted||employee.BusinessId!=service.BusinessId)return BadRequest(new{message="Çalışan ve hizmet aynı aktif işletmeye ait olmalıdır."});if(await db.EmployeeServices.AnyAsync(x=>x.EmployeeId==v.EmployeeId&&x.ServiceId==v.ServiceId))return Conflict(new{message="Bu hizmet zaten atanmış."});var x=new EmployeeService{EmployeeId=v.EmployeeId,ServiceId=v.ServiceId};db.Add(x);await db.SaveChangesAsync();await Audit("ServiceAssigned","EmployeeService",x.Id,v);return Ok(x);}
-    [HttpDelete("employee-services/{id:int}")] public async Task<IActionResult> Unassign(int id){var x=await db.EmployeeServices.FindAsync(id);if(x==null)return NotFound(new{message="Atama bulunamadı."});db.Remove(x);await db.SaveChangesAsync();await Audit("ServiceUnassigned","EmployeeService",id);return NoContent();}
+    [HttpPost("employee-services")]
+    public async Task<IActionResult> Assign(AssignmentCreate v)
+    {
+        var businessExists = await db.Businesses.AnyAsync(x => x.Id == v.BusinessId && x.IsActive && !x.IsDeleted);
+        if (!businessExists) return NotFound(new { message = "İşletme bulunamadı veya aktif değil." });
+        var employee = await db.Employees.SingleOrDefaultAsync(x => x.Id == v.EmployeeId);
+        if (employee == null || employee.IsDeleted || !employee.IsActive)
+            return NotFound(new { message = "Çalışan bulunamadı veya aktif değil." });
+        var service = await db.Services.SingleOrDefaultAsync(x => x.Id == v.ServiceId);
+        if (service == null || service.IsDeleted || !service.IsActive)
+            return NotFound(new { message = "Hizmet bulunamadı veya aktif değil." });
+        if (employee.BusinessId != v.BusinessId || service.BusinessId != v.BusinessId)
+            return BadRequest(new { message = "Çalışan ve hizmet seçilen işletmeye ait olmalıdır." });
+        if (await db.EmployeeServices.AnyAsync(x => x.EmployeeId == v.EmployeeId && x.ServiceId == v.ServiceId))
+            return Conflict(new { message = "Bu hizmet zaten çalışana atanmış." });
+
+        var assignment = new EmployeeService { EmployeeId = v.EmployeeId, ServiceId = v.ServiceId };
+        db.EmployeeServices.Add(assignment);
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            if (await db.EmployeeServices.AsNoTracking()
+                .AnyAsync(x => x.EmployeeId == v.EmployeeId && x.ServiceId == v.ServiceId))
+                return Conflict(new { message = "Bu hizmet zaten çalışana atanmış." });
+            throw;
+        }
+        await Audit("EmployeeServiceAssigned", "EmployeeService", assignment.Id,
+            new { v.BusinessId, v.EmployeeId, v.ServiceId });
+        return Ok(new { assignment.Id, v.BusinessId, v.EmployeeId, v.ServiceId });
+    }
+
+    [HttpDelete("employee-services/{id:int}")]
+    public async Task<IActionResult> Unassign(int id)
+    {
+        var assignment = await db.EmployeeServices
+            .Include(x => x.Employee)
+            .SingleOrDefaultAsync(x => x.Id == id);
+        if (assignment == null) return NotFound(new { message = "Atama bulunamadı." });
+        var auditValue = new
+        {
+            BusinessId = assignment.Employee!.BusinessId,
+            assignment.EmployeeId,
+            assignment.ServiceId
+        };
+        db.EmployeeServices.Remove(assignment);
+        await db.SaveChangesAsync();
+        await Audit("EmployeeServiceRemoved", "EmployeeService", id, auditValue);
+        return NoContent();
+    }
 
     [HttpPut("appointments/{id:int}/cancel")]
     public async Task<IActionResult> CancelAppointment(int id,CancelRequest v){var x=await db.Appointments.FindAsync(id);if(x==null)return NotFound(new{message="Randevu bulunamadı."});if(x.Status is "Completed" or "NoShow" or "CancelledRefunded" or "CancelledLate")return Conflict(new{message="Bu randevu iptal edilemez."});var now=DateTime.Now;if(now>=x.StartTime)return Conflict(new{message="Başlamış randevu iptal edilemez; gelmedi olarak işaretleyin."});x.CancelledAt=now;x.CancellationReason=v.Reason?.Trim();if(now<=x.StartTime.AddHours(-24)){x.Status="CancelledRefunded";x.PaymentStatus="DepositRefunded";}else{x.Status="CancelledLate";x.PaymentStatus="DepositKept";}await db.SaveChangesAsync();await Audit("AppointmentCancelled","Appointment",id,new{x.Status,x.PaymentStatus});return Ok(new{x.Id,x.Status,x.PaymentStatus});}
@@ -134,6 +184,6 @@ public sealed record PublicationUpdate(bool IsPublished);
 public sealed record BusinessUpdate(string Name,string? Address,string? Phone,TimeSpan OpenTime,TimeSpan CloseTime,int? OwnerUserId,bool IsActive);
 public sealed record EmployeeUpdate(string FullName,int BusinessId,bool IsActive);
 public sealed record ServiceUpdate(string Name,decimal Price,int DurationMinutes,int BufferMinutes,bool IsActive);
-public sealed record AssignmentCreate(int EmployeeId,int ServiceId);
+public sealed record AssignmentCreate(int BusinessId,int EmployeeId,int ServiceId);
 public sealed record CancelRequest(string? Reason);
 public sealed record SettingUpdate(string Value);
