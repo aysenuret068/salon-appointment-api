@@ -115,7 +115,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("reset-business-owner-password")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ResetBusinessOwnerPassword(
         ResetBusinessOwnerPasswordRequest request)
     {

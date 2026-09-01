@@ -8,23 +8,85 @@ using SalonAppointmentApi.Models;
 
 namespace SalonAppointmentApi.Controllers;
 
-[ApiController,Route("api/admin"),Authorize(Roles="Admin,SuperAdmin")]
+[ApiController,Route("api/admin"),Authorize(Roles="Admin")]
 public sealed class AdminManagementController(AppDbContext db,IWebHostEnvironment env) : ControllerBase
 {
     int AdminId=>int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier),out var id)?id:0;
     async Task Audit(string action,string type,object? id,object? value=null){db.AdminAuditLogs.Add(new AdminAuditLog{AdminUserId=AdminId,Action=action,EntityType=type,EntityId=id?.ToString(),Description=action+" "+type,NewValues=value==null?null:JsonSerializer.Serialize(value),IPAddress=HttpContext.Connection.RemoteIpAddress?.ToString()});await db.SaveChangesAsync();}
-    async Task<bool> LastSuperAdmin(AppUser user)=>user.Role=="SuperAdmin"&&user.IsActive&&!user.IsDeleted&&await db.AppUsers.CountAsync(x=>x.Role=="SuperAdmin"&&x.IsActive&&!x.IsDeleted)<=1;
     static bool SecretKey(string key)=>new[]{"secret","password","token","key"}.Any(x=>key.Contains(x,StringComparison.OrdinalIgnoreCase));
 
+    [HttpPost("users")]
+    public async Task<IActionResult> CreateUser(UserCreate input)
+    {
+        var email = input.Email?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(input.FullName) || string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(input.Phone) || string.IsNullOrWhiteSpace(input.Password))
+            return BadRequest(new { message = "Ad soyad, e-posta, telefon ve şifre zorunludur." });
+        if (!System.Net.Mail.MailAddress.TryCreate(email, out _))
+            return BadRequest(new { message = "Geçerli bir e-posta adresi girin." });
+        if (input.Password.Length < 8)
+            return BadRequest(new { message = "Şifre en az 8 karakter olmalıdır." });
+        if (input.Role is not ("Customer" or "BusinessOwner" or "Admin"))
+            return BadRequest(new { message = "Geçersiz rol." });
+        if (await db.AppUsers.AnyAsync(x => x.Email == email && !x.IsDeleted))
+            return Conflict(new { message = "Bu e-posta zaten kullanılıyor." });
+        var user = new AppUser { FullName = input.FullName.Trim(), Email = email, Phone = input.Phone.Trim(),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(input.Password), Role = input.Role,
+            IsActive = input.IsActive, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        db.AppUsers.Add(user); await db.SaveChangesAsync();
+        await Audit("UserCreated", "User", user.Id, new { user.FullName, user.Email, user.Phone, user.Role, user.IsActive });
+        return Ok(new { user.Id, user.FullName, user.Email, user.Phone, user.Role, user.IsActive, user.CreatedAt });
+    }
+
+    [HttpPost("businesses")]
+    public async Task<IActionResult> CreateBusiness(BusinessCreate input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Name) || input.CloseTime <= input.OpenTime)
+            return BadRequest(new { message = "İşletme adı ve çalışma saatleri geçerli olmalıdır." });
+        if (!await db.AppUsers.AnyAsync(x => x.Id == input.OwnerUserId && x.Role == "BusinessOwner" && x.IsActive && !x.IsDeleted))
+            return BadRequest(new { message = "Geçerli ve aktif bir işletme sahibi seçin." });
+        var business = new Business { Name = input.Name.Trim(), Address = input.Address?.Trim(), Phone = input.Phone?.Trim(),
+            OpenTime = input.OpenTime, CloseTime = input.CloseTime, OwnerUserId = input.OwnerUserId,
+            IsActive = input.IsActive, CreatedAt = DateTime.UtcNow };
+        db.Businesses.Add(business); await db.SaveChangesAsync(); await Audit("BusinessCreated", "Business", business.Id, input);
+        return Ok(business);
+    }
+
+    [HttpPost("employees")]
+    public async Task<IActionResult> CreateEmployee(EmployeeCreate input)
+    {
+        if (string.IsNullOrWhiteSpace(input.FullName))
+            return BadRequest(new { message = "Çalışan adı zorunludur." });
+        if (!await db.Businesses.AnyAsync(x => x.Id == input.BusinessId && x.IsActive && !x.IsDeleted))
+            return BadRequest(new { message = "Geçerli ve aktif bir işletme seçin." });
+        var employee = new Employee { FullName = input.FullName.Trim(), BusinessId = input.BusinessId, IsActive = input.IsActive };
+        db.Employees.Add(employee); await db.SaveChangesAsync(); await Audit("EmployeeCreated", "Employee", employee.Id, input);
+        return Ok(employee);
+    }
+
+    [HttpPost("services")]
+    public async Task<IActionResult> CreateService(ServiceCreate input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Name) || input.Price < 0 || input.DurationMinutes <= 0 || input.BufferMinutes < 0)
+            return BadRequest(new { message = "Hizmet adı, fiyat ve süre bilgileri geçerli olmalıdır." });
+        if (!await db.Businesses.AnyAsync(x => x.Id == input.BusinessId && x.IsActive && !x.IsDeleted))
+            return BadRequest(new { message = "Geçerli ve aktif bir işletme seçin." });
+        var service = new ServiceItem { Name = input.Name.Trim(), BusinessId = input.BusinessId, Price = input.Price,
+            DurationMinutes = input.DurationMinutes, BufferMinutes = input.BufferMinutes, IsActive = input.IsActive };
+        db.Services.Add(service); await db.SaveChangesAsync(); await Audit("ServiceCreated", "Service", service.Id, input);
+        return Ok(service);
+    }
+
+
     [HttpPatch("users/{id:int}")]
-    public async Task<IActionResult> UpdateUser(int id,UserUpdate input){var x=await db.AppUsers.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Kullanıcı bulunamadı."});if(string.IsNullOrWhiteSpace(input.FullName)||string.IsNullOrWhiteSpace(input.Email))return BadRequest(new{message="Ad soyad ve e-posta zorunludur."});var email=input.Email.Trim().ToLowerInvariant();if(await db.AppUsers.AnyAsync(u=>u.Id!=id&&!u.IsDeleted&&u.Email==email))return Conflict(new{message="Bu e-posta başka bir kullanıcı tarafından kullanılıyor."});var roles=new[]{"Customer","BusinessOwner","Admin","SuperAdmin"};if(!roles.Contains(input.Role))return BadRequest(new{message="Geçersiz rol."});if(input.Role=="SuperAdmin"&&!User.IsInRole("SuperAdmin"))return Forbid();if(id==AdminId&&!input.IsActive)return Conflict(new{message="Kendi hesabınızı pasifleştiremezsiniz."});if(await LastSuperAdmin(x)&&(input.Role!="SuperAdmin"||!input.IsActive))return Conflict(new{message="Son aktif Süper Admin korunmalıdır."});x.FullName=input.FullName.Trim();x.Email=email;x.Phone=input.Phone.Trim();x.Role=input.Role;x.IsActive=input.IsActive;x.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync();await Audit("UserUpdated","User",id,new{x.FullName,x.Email,x.Phone,x.Role,x.IsActive});return Ok(new{x.Id,x.FullName,x.Email,x.Phone,x.Role,x.IsActive});}
+    public async Task<IActionResult> UpdateUser(int id,UserUpdate input){var x=await db.AppUsers.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Kullanıcı bulunamadı."});if(string.IsNullOrWhiteSpace(input.FullName)||string.IsNullOrWhiteSpace(input.Email))return BadRequest(new{message="Ad soyad ve e-posta zorunludur."});var email=input.Email.Trim().ToLowerInvariant();if(await db.AppUsers.AnyAsync(u=>u.Id!=id&&!u.IsDeleted&&u.Email==email))return Conflict(new{message="Bu e-posta başka bir kullanıcı tarafından kullanılıyor."});var roles=new[]{"Customer","BusinessOwner","Admin"};if(!roles.Contains(input.Role))return BadRequest(new{message="Geçersiz rol."});if(id==AdminId&&(!input.IsActive||input.Role!="Admin"))return Conflict(new{message="Kendi aktif Admin rolünüzü değiştiremezsiniz."});x.FullName=input.FullName.Trim();x.Email=email;x.Phone=input.Phone.Trim();x.Role=input.Role;x.IsActive=input.IsActive;x.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync();await Audit("UserUpdated","User",id,new{x.FullName,x.Email,x.Phone,x.Role,x.IsActive});return Ok(new{x.Id,x.FullName,x.Email,x.Phone,x.Role,x.IsActive});}
     [HttpPatch("users/{id:int}/status")]
-    public async Task<IActionResult> UserStatus(int id,StatusUpdate input){var x=await db.AppUsers.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Kullanıcı bulunamadı."});if(id==AdminId&&!input.IsActive)return Conflict(new{message="Kendi hesabınızı pasifleştiremezsiniz."});if(!input.IsActive&&await LastSuperAdmin(x))return Conflict(new{message="Son aktif Süper Admin korunmalıdır."});x.IsActive=input.IsActive;x.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync();await Audit(input.IsActive?"UserActivated":"UserDisabled","User",id);return Ok(new{x.Id,x.IsActive});}
+    public async Task<IActionResult> UserStatus(int id,StatusUpdate input){var x=await db.AppUsers.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Kullanıcı bulunamadı."});if(id==AdminId&&!input.IsActive)return Conflict(new{message="Kendi hesabınızı pasifleştiremezsiniz."});x.IsActive=input.IsActive;x.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync();await Audit(input.IsActive?"UserActivated":"UserDisabled","User",id);return Ok(new{x.Id,x.IsActive});}
     [HttpDelete("users/{id:int}")]
-    public async Task<IActionResult> DeleteUser(int id){if(id==AdminId)return Conflict(new{message="Kendi hesabınızı silemezsiniz."});var x=await db.AppUsers.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Kullanıcı bulunamadı."});if(await LastSuperAdmin(x))return Conflict(new{message="Son aktif Süper Admin silinemez."});x.IsDeleted=true;x.IsActive=false;x.DeletedAt=DateTime.UtcNow;x.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync();await Audit("UserDeleted","User",id);return NoContent();}
+    public async Task<IActionResult> DeleteUser(int id){if(id==AdminId)return Conflict(new{message="Kendi hesabınızı silemezsiniz."});var x=await db.AppUsers.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="Kullanıcı bulunamadı."});x.IsDeleted=true;x.IsActive=false;x.DeletedAt=DateTime.UtcNow;x.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync();await Audit("UserDeleted","User",id);return NoContent();}
 
     [HttpPut("businesses/{id:int}")]
-    public async Task<IActionResult> Business(int id,BusinessUpdate v){var x=await db.Businesses.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="İşletme bulunamadı."});if(string.IsNullOrWhiteSpace(v.Name)||v.CloseTime<=v.OpenTime)return BadRequest(new{message="İşletme adı ve çalışma saatleri geçerli olmalıdır."});if(v.OwnerUserId.HasValue&&!await db.AppUsers.AnyAsync(u=>u.Id==v.OwnerUserId&&!u.IsDeleted&&u.IsActive&&(u.Role=="BusinessOwner"||u.Role=="Admin"||u.Role=="SuperAdmin")))return BadRequest(new{message="Geçerli bir işletme sahibi seçin."});x.Name=v.Name.Trim();x.Address=v.Address?.Trim();x.Phone=v.Phone?.Trim();x.OpenTime=v.OpenTime;x.CloseTime=v.CloseTime;x.OwnerUserId=v.OwnerUserId;x.IsActive=v.IsActive;await db.SaveChangesAsync();await Audit("BusinessUpdated","Business",id,v);return Ok(x);}
+    public async Task<IActionResult> Business(int id,BusinessUpdate v){var x=await db.Businesses.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="İşletme bulunamadı."});if(string.IsNullOrWhiteSpace(v.Name)||v.CloseTime<=v.OpenTime)return BadRequest(new{message="İşletme adı ve çalışma saatleri geçerli olmalıdır."});if(v.OwnerUserId.HasValue&&!await db.AppUsers.AnyAsync(u=>u.Id==v.OwnerUserId&&!u.IsDeleted&&u.IsActive&&u.Role=="BusinessOwner"))return BadRequest(new{message="Geçerli bir işletme sahibi seçin."});x.Name=v.Name.Trim();x.Address=v.Address?.Trim();x.Phone=v.Phone?.Trim();x.OpenTime=v.OpenTime;x.CloseTime=v.CloseTime;x.OwnerUserId=v.OwnerUserId;x.IsActive=v.IsActive;await db.SaveChangesAsync();await Audit("BusinessUpdated","Business",id,v);return Ok(x);}
     [HttpPatch("businesses/{id:int}/status")] public async Task<IActionResult> BusinessStatus(int id,StatusUpdate v){var x=await db.Businesses.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="İşletme bulunamadı."});x.IsActive=v.IsActive;await db.SaveChangesAsync();await Audit(v.IsActive?"BusinessActivated":"BusinessDisabled","Business",id);return Ok(new{x.Id,x.IsActive});}
     [HttpDelete("businesses/{id:int}")] public async Task<IActionResult> DeleteBusiness(int id){var x=await db.Businesses.FindAsync(id);if(x==null||x.IsDeleted)return NotFound(new{message="İşletme bulunamadı."});x.IsDeleted=true;x.IsActive=false;await db.SaveChangesAsync();await Audit("BusinessDeleted","Business",id);return NoContent();}
 
@@ -62,6 +124,10 @@ public sealed class AdminManagementController(AppDbContext db,IWebHostEnvironmen
     [HttpPost("media"),RequestSizeLimit(10_000_000)] public async Task<IActionResult> Media(IFormFile file){if(file.Length==0||file.Length>10_000_000)return BadRequest(new{message="Geçersiz dosya."});var allowed=new[]{"image/jpeg","image/png","image/webp","application/pdf"};if(!allowed.Contains(file.ContentType))return BadRequest(new{message="Desteklenmeyen dosya türü."});var dir=Path.Combine(env.WebRootPath??Path.Combine(env.ContentRootPath,"wwwroot"),"media");Directory.CreateDirectory(dir);var name=Guid.NewGuid().ToString("N")+Path.GetExtension(file.FileName);await using(var stream=System.IO.File.Create(Path.Combine(dir,name)))await file.CopyToAsync(stream);var x=new MediaAsset{FileName=name,OriginalFileName=Path.GetFileName(file.FileName),Url="/media/"+name,MimeType=file.ContentType,SizeBytes=file.Length,UploadedByAdminUserId=AdminId};db.Add(x);await db.SaveChangesAsync();await Audit("MediaUploaded","Media",x.Id);return Ok(x);}
     [HttpDelete("media/{id:int}")] public async Task<IActionResult> DeleteMedia(int id){var x=await db.MediaAssets.FindAsync(id);if(x==null)return NotFound(new{message="Medya bulunamadı."});var root=Path.GetFullPath(env.WebRootPath??Path.Combine(env.ContentRootPath,"wwwroot"));var path=Path.GetFullPath(Path.Combine(root,"media",x.FileName));if(path.StartsWith(root,StringComparison.OrdinalIgnoreCase)&&System.IO.File.Exists(path))System.IO.File.Delete(path);db.Remove(x);await db.SaveChangesAsync();await Audit("MediaDeleted","Media",id);return NoContent();}
 }
+public sealed record UserCreate(string FullName,string Email,string Phone,string Password,string Role,bool IsActive);
+public sealed record BusinessCreate(string Name,string? Address,string? Phone,TimeSpan OpenTime,TimeSpan CloseTime,int OwnerUserId,bool IsActive);
+public sealed record EmployeeCreate(string FullName,int BusinessId,bool IsActive);
+public sealed record ServiceCreate(string Name,int BusinessId,decimal Price,int DurationMinutes,int BufferMinutes,bool IsActive);
 public sealed record UserUpdate(string FullName,string Email,string Phone,string Role,bool IsActive);
 public sealed record StatusUpdate(bool IsActive);
 public sealed record PublicationUpdate(bool IsPublished);

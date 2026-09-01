@@ -26,7 +26,7 @@ public sealed class AdminAuthController(AppDbContext context, ITokenService toke
         if (!user.IsActive)
             return StatusCode(StatusCodes.Status403Forbidden, "Kullanıcı hesabı devre dışı.");
 
-        if (user.Role is not ("Admin" or "SuperAdmin"))
+        if (user.Role != "Admin")
             return StatusCode(StatusCodes.Status403Forbidden,
                 "Bu hesabın yönetim paneline erişim yetkisi bulunmuyor.");
 

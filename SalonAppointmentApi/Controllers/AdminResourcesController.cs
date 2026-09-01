@@ -5,7 +5,7 @@ using SalonAppointmentApi.Data;
 
 namespace SalonAppointmentApi.Controllers;
 
-[ApiController, Route("api/admin"), Authorize(Roles = "Admin,SuperAdmin")]
+[ApiController, Route("api/admin"), Authorize(Roles = "Admin")]
 public sealed class AdminResourcesController(AppDbContext db) : ControllerBase
 {
     static int PageNumber(int value) => Math.Max(1, value);
@@ -35,6 +35,17 @@ public sealed class AdminResourcesController(AppDbContext db) : ControllerBase
     [HttpGet("media")] public Task<IActionResult> Media(int page=1,int pageSize=25)=>Page(db.MediaAssets.AsNoTracking().OrderByDescending(x=>x.CreatedAt),page,pageSize);
     [HttpGet("settings")] public Task<IActionResult> Settings(int page=1,int pageSize=25)=>Page(db.AppSettings.AsNoTracking().Where(x=>!x.Key.Contains("Secret")&&!x.Key.Contains("Password")&&!x.Key.Contains("Token")&&!x.Key.Contains("Key")).OrderBy(x=>x.Group).ThenBy(x=>x.Key),page,pageSize);
     [HttpGet("audit-logs")] public Task<IActionResult> AuditLogs(int page=1,int pageSize=25)=>Page(db.AdminAuditLogs.AsNoTracking().OrderByDescending(x=>x.CreatedAt),page,pageSize);
+
+    [HttpGet("lookups/business-owners")]
+    public async Task<IActionResult> BusinessOwners() => Ok(await db.AppUsers.AsNoTracking()
+        .Where(x => x.Role == "BusinessOwner" && x.IsActive && !x.IsDeleted)
+        .OrderBy(x => x.FullName).Select(x => new { x.Id, x.FullName, x.Email }).ToListAsync());
+
+    [HttpGet("lookups/businesses")]
+    public async Task<IActionResult> BusinessLookup() => Ok(await db.Businesses.AsNoTracking()
+        .Where(x => x.IsActive && !x.IsDeleted).OrderBy(x => x.Name)
+        .Select(x => new { x.Id, x.Name }).ToListAsync());
+
     [HttpGet("reports")] public async Task<IActionResult> Reports(DateTime? from=null,DateTime? to=null){var start=(from??DateTime.UtcNow.AddDays(-30)).Date;var end=(to??DateTime.UtcNow).Date.AddDays(1);var q=db.Appointments.AsNoTracking().Where(x=>x.StartTime>=start&&x.StartTime<end);return Ok(new{from=start,to=end.AddDays(-1),appointments=await q.CountAsync(),completed=await q.CountAsync(x=>x.Status=="Completed"),cancelled=await q.CountAsync(x=>x.Status=="CancelledRefunded"||x.Status=="CancelledLate"),revenue=await q.Where(x=>x.Status=="Completed").SumAsync(x=>(decimal?)x.TotalPrice)??0});}
     [HttpGet("system-status")] public async Task<IActionResult> Status(){var start=DateTime.UtcNow;var connected=await db.Database.CanConnectAsync();return Ok(new{status=connected?"Healthy":"Unhealthy",database=connected?"Connected":"Disconnected",checkedAtUtc=DateTime.UtcNow,responseMilliseconds=(DateTime.UtcNow-start).TotalMilliseconds});}
 }

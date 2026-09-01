@@ -7,7 +7,7 @@ namespace SalonAppointmentApi.Controllers;
 
 [ApiController]
 [Route("api/admin/dashboard")]
-[Authorize(Roles = "Admin,SuperAdmin")]
+[Authorize(Roles = "Admin")]
 public class AdminDashboardController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
@@ -25,7 +25,7 @@ public class AdminDashboardController(AppDbContext db) : ControllerBase
             totalUsers = await users.CountAsync(cancellationToken),
             customers = await users.CountAsync(x => x.Role == "Customer", cancellationToken),
             businessOwners = await users.CountAsync(x => x.Role == "BusinessOwner", cancellationToken),
-            admins = await users.CountAsync(x => x.Role == "Admin" || x.Role == "SuperAdmin", cancellationToken),
+            admins = await users.CountAsync(x => x.Role == "Admin", cancellationToken),
             totalBusinesses = await db.Businesses.AsNoTracking().CountAsync(cancellationToken),
             activeBusinesses = await db.Businesses.AsNoTracking().CountAsync(cancellationToken),
             totalEmployees = await db.Employees.AsNoTracking().CountAsync(cancellationToken),
