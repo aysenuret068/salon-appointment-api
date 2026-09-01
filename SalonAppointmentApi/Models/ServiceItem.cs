@@ -1,4 +1,4 @@
-﻿namespace SalonAppointmentApi.Models
+namespace SalonAppointmentApi.Models
 {
     public class ServiceItem
     {
@@ -14,6 +14,9 @@
         public int BufferMinutes { get; set; }
 
         public decimal Price { get; set; }
+
+        public bool IsActive { get; set; } = true;
+        public bool IsDeleted { get; set; }
 
         public Business? Business { get; set; }
     }

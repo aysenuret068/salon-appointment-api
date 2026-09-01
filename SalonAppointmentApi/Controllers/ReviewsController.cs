@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SalonAppointmentApi.Data;
 using SalonAppointmentApi.Dtos;
@@ -103,7 +103,7 @@ public class ReviewsController : ControllerBase
 
         var reviews = await _context.Reviews
             .AsNoTracking()
-            .Where(r => r.BusinessId == businessId)
+            .Where(r => r.BusinessId == businessId && r.IsPublished)
             .OrderByDescending(r => r.CreatedAt)
             .Select(r => new
             {
@@ -132,7 +132,7 @@ public class ReviewsController : ControllerBase
     {
         var ratingData = await _context.Reviews
             .AsNoTracking()
-            .Where(r => r.BusinessId == businessId)
+            .Where(r => r.BusinessId == businessId && r.IsPublished)
             .GroupBy(r => r.BusinessId)
             .Select(group => new
             {

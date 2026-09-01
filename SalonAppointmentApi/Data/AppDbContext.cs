@@ -51,6 +51,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Business>().Property(x => x.IsActive).HasDefaultValue(true);
         modelBuilder.Entity<Business>().Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
         modelBuilder.Entity<Employee>().Property(x => x.IsActive).HasDefaultValue(true);
+        modelBuilder.Entity<ServiceItem>().Property(x => x.IsActive).HasDefaultValue(true);
+        modelBuilder.Entity<Review>().Property(x => x.IsPublished).HasDefaultValue(true);
         modelBuilder.Entity<ContentItem>().HasIndex(x => x.Key).IsUnique();
         modelBuilder.Entity<AppSetting>().HasIndex(x => x.Key).IsUnique();
         modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.CreatedAt);
