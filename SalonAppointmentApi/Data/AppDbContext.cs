@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using SalonAppointmentApi.Models;
 
 namespace SalonAppointmentApi.Data;
@@ -16,6 +16,12 @@ public class AppDbContext : DbContext
     public DbSet<EmployeeService> EmployeeServices => Set<EmployeeService>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<ContentItem> ContentItems => Set<ContentItem>();
+    public DbSet<Announcement> Announcements => Set<Announcement>();
+    public DbSet<FaqItem> FaqItems => Set<FaqItem>();
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AppUser>()
@@ -41,6 +47,13 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<EmployeeService>()
             .HasIndex(x => new { x.EmployeeId, x.ServiceId })
             .IsUnique();
+
+        modelBuilder.Entity<Business>().Property(x => x.IsActive).HasDefaultValue(true);
+        modelBuilder.Entity<Business>().Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+        modelBuilder.Entity<Employee>().Property(x => x.IsActive).HasDefaultValue(true);
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.Key).IsUnique();
+        modelBuilder.Entity<AppSetting>().HasIndex(x => x.Key).IsUnique();
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.CreatedAt);
 
         modelBuilder.Entity<Business>()
             .HasOne(x => x.OwnerUser)

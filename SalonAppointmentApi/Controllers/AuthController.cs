@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SalonAppointmentApi.Data;
 using SalonAppointmentApi.DTOs;
 using SalonAppointmentApi.Models;
+using SalonAppointmentApi.Auth;
 
 namespace SalonAppointmentApi.Controllers;
 
@@ -11,10 +13,12 @@ namespace SalonAppointmentApi.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly ITokenService _tokenService;
 
-    public AuthController(AppDbContext context)
+    public AuthController(AppDbContext context, ITokenService tokenService)
     {
         _context = context;
+        _tokenService = tokenService;
     }
 
     [HttpPost("register")]
@@ -53,8 +57,11 @@ public class AuthController : ControllerBase
         _context.AppUsers.Add(user);
         await _context.SaveChangesAsync();
 
+        var token = _tokenService.CreateAccessToken(user);
         var response = new LoginResponse
         {
+            AccessToken = token.Token,
+            ExpiresAtUtc = token.ExpiresAtUtc,
             UserId = user.Id,
             FullName = user.FullName,
             Email = user.Email,
@@ -71,7 +78,7 @@ public class AuthController : ControllerBase
         request.Email = request.Email.Trim().ToLower();
 
         var user = await _context.AppUsers
-            .FirstOrDefaultAsync(x => x.Email == request.Email);
+            .FirstOrDefaultAsync(x => x.Email == request.Email && !x.IsDeleted);
 
         if (user == null)
             return Unauthorized("Email veya şifre hatalı.");
@@ -84,8 +91,14 @@ public class AuthController : ControllerBase
         if (!passwordIsValid)
             return Unauthorized("Email veya şifre hatalı.");
 
+        if (!user.IsActive)
+            return StatusCode(StatusCodes.Status403Forbidden, "Kullanıcı hesabı devre dışı.");
+
+        var token = _tokenService.CreateAccessToken(user);
         var response = new LoginResponse
         {
+            AccessToken = token.Token,
+            ExpiresAtUtc = token.ExpiresAtUtc,
             UserId = user.Id,
             FullName = user.FullName,
             Email = user.Email,
@@ -102,6 +115,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("reset-business-owner-password")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<IActionResult> ResetBusinessOwnerPassword(
         ResetBusinessOwnerPasswordRequest request)
     {
@@ -125,13 +139,6 @@ public class AuthController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return Ok(new
-        {
-            message = "İşletme sahibi şifresi başarıyla sıfırlandı.",
-            businessName = business.Name,
-            ownerUserId = owner.Id,
-            email = owner.Email,
-            newPassword = request.NewPassword
-        });
+        return Ok(new { message = "İşletme sahibi şifresi başarıyla sıfırlandı." });
     }
 }

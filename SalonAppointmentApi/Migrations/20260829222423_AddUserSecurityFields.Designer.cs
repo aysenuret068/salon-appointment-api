@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SalonAppointmentApi.Data;
 
@@ -11,9 +12,11 @@ using SalonAppointmentApi.Data;
 namespace SalonAppointmentApi.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829222423_AddUserSecurityFields")]
+    partial class AddUserSecurityFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,129 +24,6 @@ namespace SalonAppointmentApi.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
-
-            modelBuilder.Entity("SalonAppointmentApi.Models.AdminAuditLog", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("AdminUserId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("EntityId")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("IPAddress")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("NewValues")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("OldValues")
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.ToTable("AdminAuditLogs");
-                });
-
-            modelBuilder.Entity("SalonAppointmentApi.Models.Announcement", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("EndAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<DateTime?>("StartAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Announcements");
-                });
-
-            modelBuilder.Entity("SalonAppointmentApi.Models.AppSetting", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("DataType")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Group")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<bool>("IsPublic")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("AppSettings");
-                });
 
             modelBuilder.Entity("SalonAppointmentApi.Models.AppUser", b =>
                 {
@@ -286,19 +166,6 @@ namespace SalonAppointmentApi.Migrations
                     b.Property<TimeSpan>("CloseTime")
                         .HasColumnType("time(6)");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -319,54 +186,6 @@ namespace SalonAppointmentApi.Migrations
                     b.ToTable("Businesses");
                 });
 
-            modelBuilder.Entity("SalonAppointmentApi.Models.ContentItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Group")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("ImageUrl")
-                        .HasColumnType("longtext");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("ContentItems");
-                });
-
             modelBuilder.Entity("SalonAppointmentApi.Models.Employee", b =>
                 {
                     b.Property<int>("Id")
@@ -381,11 +200,6 @@ namespace SalonAppointmentApi.Migrations
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasColumnType("longtext");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("tinyint(1)")
-                        .HasDefaultValue(true);
 
                     b.HasKey("Id");
 
@@ -416,81 +230,6 @@ namespace SalonAppointmentApi.Migrations
                         .IsUnique();
 
                     b.ToTable("EmployeeServices");
-                });
-
-            modelBuilder.Entity("SalonAppointmentApi.Models.FaqItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Answer")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("Question")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("FaqItems");
-                });
-
-            modelBuilder.Entity("SalonAppointmentApi.Models.MediaAsset", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("MimeType")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("OriginalFileName")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<long>("SizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("StorageProvider")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<int>("UploadedByAdminUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("MediaAssets");
                 });
 
             modelBuilder.Entity("SalonAppointmentApi.Models.Review", b =>

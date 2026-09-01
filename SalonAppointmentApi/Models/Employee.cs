@@ -6,6 +6,7 @@
 
         public int BusinessId { get; set; }
         public string FullName { get; set; } = "";
+        public bool IsActive { get; set; } = true;
 
         public Business? Business { get; set; }
 
