@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SalonAppointmentApi.Data;
 using SalonAppointmentApi.DTOs;
@@ -21,7 +21,7 @@ public class EmployeesController : ControllerBase
     public async Task<IActionResult> GetEmployeesByBusiness(int businessId)
     {
         var employees = await _context.Employees
-            .Where(x => x.BusinessId == businessId)
+            .Where(x => x.BusinessId == businessId && !x.IsDeleted && x.IsActive)
             .ToListAsync();
 
         return Ok(employees);

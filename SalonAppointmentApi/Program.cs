@@ -1,10 +1,14 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using SalonAppointmentApi.Auth;
 using SalonAppointmentApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Render tarafýndan verilen PORT deðerini kullanýr.
-// Bilgisayarda çalýþtýrýrken launchSettings kullanýlmaya devam eder.
+// Render tarafÄ±ndan verilen PORT deÄŸerini kullanÄ±r.
+// Bilgisayarda Ã§alÄ±ÅŸtÄ±rÄ±rken launchSettings kullanÄ±lmaya devam eder.
 var renderPort = Environment.GetEnvironmentVariable("PORT");
 
 if (!string.IsNullOrWhiteSpace(renderPort))
@@ -13,19 +17,39 @@ if (!string.IsNullOrWhiteSpace(renderPort))
 }
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
+var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
+var jwtOptions = jwtSection.Get<JwtOptions>()
+    ?? throw new InvalidOperationException("JWT configuration is missing.");
+if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || jwtOptions.SigningKey.Length < 32)
+    throw new InvalidOperationException("JWT signing key must contain at least 32 characters.");
+
+builder.Services.Configure<JwtOptions>(jwtSection);
+builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options => options.TokenValidationParameters = new TokenValidationParameters
     {
-        policy
-            .AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        ValidateIssuer = true,
+        ValidIssuer = jwtOptions.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtOptions.Audience,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+        ClockSkew = TimeSpan.FromMinutes(1)
     });
-});
+builder.Services.AddAuthorization();
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy("AppCors", policy =>
+{
+    if (allowedOrigins.Length == 0 && builder.Environment.IsDevelopment()) policy.AllowAnyOrigin();
+    else policy.WithOrigins(allowedOrigins);
+    policy.AllowAnyHeader().AllowAnyMethod();
+}));
 
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection");
@@ -33,7 +57,7 @@ var connectionString =
 if (string.IsNullOrWhiteSpace(connectionString))
 {
     throw new InvalidOperationException(
-        "DefaultConnection baðlantý bilgisi bulunamadý."
+        "DefaultConnection baÄŸlantÄ± bilgisi bulunamadÄ±."
     );
 }
 
@@ -47,7 +71,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 var app = builder.Build();
 
-// TiDB üzerinde eksik tablolarý migration dosyalarýndan oluþturur.
+app.UseExceptionHandler();
+
+// TiDB Ã¼zerinde eksik tablolarÄ± migration dosyalarÄ±ndan oluÅŸturur.
 using (var scope = app.Services.CreateScope())
 {
     var dbContext =
@@ -58,22 +84,24 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSwagger();
 app.UseSwaggerUI();
+app.UseStaticFiles();
 
-// Render HTTPS iþlemini kendisi yönettiði için burada
-// app.UseHttpsRedirection() kullanmýyoruz.
+// Render HTTPS iÅŸlemini kendisi yÃ¶nettiÄŸi iÃ§in burada
+// app.UseHttpsRedirection() kullanmÄ±yoruz.
 
-app.UseCors("AllowAll");
+app.UseCors("AppCors");
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
 app.MapGet("/", () => Results.Ok(
     new
     {
-        message = "Salon Appointment API çalýþýyor."
+        message = "Salon Appointment API Ã§alÄ±ÅŸÄ±yor."
     }
 ));
 
 
 
-app.Run();  
+app.Run();
